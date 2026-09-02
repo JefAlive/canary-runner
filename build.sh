@@ -1,3 +1,3 @@
 #!/bin/bash
 
-go build -o canary-runner .
+go build -o canary-runner ./src
