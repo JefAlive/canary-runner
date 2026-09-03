@@ -15,10 +15,10 @@
 Subir um servidor moderno de Tibia no seu computador (especialmente usando **Windows + WSL**) virou um processo cansativo e confuso:
 
 * Ter que abrir **4 janelas de terminal** diferentes (uma pro Banco MySQL, uma pro Canary, uma pro Login Server e outra pro Patcher).
-* **O IP do WSL muda toda vez que o Windows reinicia**, e aí o jogo não conecta mais até você caçar onde editar o IP de novo.
-* Ter que abrir arquivos de texto estranhos (`local.toml`, `config.lua`, `config.toml`) e torcer para não errar uma vírgula.
+* Ter que abrir arquivos de texto estranhos pra quem não é desenvolvedor de software (`local.toml`, `config.lua`) e torcer para não errar uma vírgula.
 * **Perder progresso e casas (Rollback)** ao fechar a janela do servidor na pressa sem o Canary salvar o mapa.
 * Ter que instalar programas pesados de banco de dados só para criar uma conta ou colocar um personagem como **GOD**.
+* Ter que instalar um monte de dependências, compilar, se deparar com vários erros e não conseguir rodar nem o servidor de testes.
 
 ---
 
@@ -37,58 +37,25 @@ Com um único comando no terminal, você tem uma central completa:
 
 ---
 
+## 🧑‍💻 Para desenvolvedores também!
+
+Se você é dev e quer contribuir com a comunidade de Open Tibia, por que isso deveria ser tão sofrível? A cada update do Tibia chega um caminhão de atualizações, porém processos como editar monstros, outfits, npcs ou fórmulas são processos que sempre são repetidos, pra isso criamos ferramentas que facilitem tanto o dev como o entusiasta de OT Server.
+
+---
+
 ## 🖥️ Espie como é por dentro
 
 ### 1. Menu Principal (Dia a dia descomplicado)
 Tudo o que você precisa para controlar seu servidor com as setas do teclado:
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ MySQL: ● ON   Login: ● ON   Canary: ● ON                                 │
-└──────────────────────────────────────────────────────────────────────────┘
-
- ▶ 🚀 Canary Server (Servidor do Jogo)                              ● ON
-      Liga o mundo do jogo, monstros, mapa, magias e sistemas
-
-    🔑 Login Server (Servidor de Contas)                             ● ON
-      Liga o serviço que valida senhas e lista os personagens
-
-    🗄️ MySQL Database (Banco de Dados)                              ● ON
-      Liga onde ficam salvas as contas, personagens, itens e casas
-
-    🎮 Abrir Tibia no Windows                                     ⚡ EXECUTAR
-      Dispara o jogo no Windows direto pelo terminal sem caçar a pasta
-
-    👥 Gerenciar Jogadores & Contas                               ⚡ SUBMENU
-      Painel para criar contas, criar personagens, GOD e Tibia Coins
-
-    ⚙️ Setup & Conexões do Servidor                               ⚡ SUBMENU
-      Instalação 1-click, sincronizar IPs, baixar client e pastas
-
-    🎨 Escolher Tema                                               dracula
-      Alterne as cores visuais do painel (Dracula, Tokyo, Tron, etc.)
-
-    ❌ Sair
-
-⚡ ATALHOS: [↑/↓] Navegar  •  [ENTER] Selecionar  •  [T] Temas  •  [Q] Sair
-```
+![menu principal](docs/image1.png)
 
 ---
 
 ### 2. Acompanhamento de Logs ao Vivo (Com Safe Shutdown)
 Ao clicar no Canary ou Login Server, você vê o servidor subindo em tempo real com as cores originais:
 
-```text
-🖥️  PAINEL DO SERVIÇO: CANARY OT SERVER   Status: ● ON   (PID: 23590)
-╭──────────────────────────────────────────────────────────────────────────╮
-│ [INFO] Loading map: canary.otbm... Done (12.4s)                          │
-│ [INFO] Spawning monsters and bosses... Done (4.1s)                       │
-│ [INFO] Loaded 1420 spells and 320 raids.                                 │
-│ [INFO] >> Canary Server is ONLINE! Running on 0.0.0.0:7171 <<            │
-╰──────────────────────────────────────────────────────────────────────────╯
-
-⚡ AÇÕES: [S] 🛑 Safe Stop (Salvar) • [K] 💀 Force Kill (-9) • [Esc] Voltar
-```
+![logs](docs/image5.png)
 
 > **Dica:** Apertando **`[S]`**, ele avisa o Canary para salvar todo o mundo e desconectar os jogadores com integridade antes de fechar. Sem sustos de *rollback*!
 
@@ -97,61 +64,21 @@ Ao clicar no Canary ou Login Server, você vê o servidor subindo em tempo real 
 ### 3. Painel de Setup & Configurações Automáticas
 Seja jogando pelo Windows no WSL, em um servidor na nuvem ou em Linux puro, o menu se adapta ao que você precisa:
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ ⚙️  SETUP & CONEXÕES   [ Modo: 🖥️ Jogando pelo Windows (WSL) ]           │
-└──────────────────────────────────────────────────────────────────────────┘
-
- ▶ ⚡ Instalação Automática Completa (1-Click)
-      Baixa todos os arquivos do servidor, baixa o jogo e deixa tudo pronto
-
-   🔄 Sincronizar Conexão do Jogo com o Windows
-      Ajusta o servidor e o jogo com o endereço atual para você conseguir entrar
-
-   🎮 Configurar o Tibia (Client.exe)
-      Prepara o jogo para abrir e conectar direto no seu servidor
-
-   📥 Apenas Baixar o Tibia 15.25
-      Baixa os arquivos do jogo prontos para jogar se você ainda não tiver
-
-   📁 Alterar Pastas dos Arquivos
-      Apenas para quem já baixou ou moveu as pastas do servidor manualmente
-
-   🌐 Trocar Modo de Uso (Ativo: 🖥️ Windows/WSL)
-      Mude se você estiver rodando em uma máquina na nuvem ou Linux puro
-
-   ❮ Voltar ao Menu Principal
-```
+![setup](docs/image3.png)
 
 ---
 
 ### 4. Gestão de Contas e GOD (Sem mexer em Banco de Dados)
 Chega de instalar softwares pesados para gerenciar seu servidor local:
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ 👥  GERENCIAR JOGADORES & CONTAS                                         │
-└──────────────────────────────────────────────────────────────────────────┘
+![accounts](docs/image2.png)
 
- 1. 👤 Criar Nova Conta
-    -> Cria uma nova conta de acesso (Login e Senha) direto no banco
+---
 
- 2. 🧙‍♂️ Criar Novo Personagem
-    -> Cria um personagem escolhendo Nome, Vocação, Sexo e Nível inicial
+### 5. Personalização e Atualização
+Editar ou criar monstros, spells, magias, cooldowns, itens, balanceamentos. Enfim, todas configurações que afetam a jogabilidade de um servidor:
 
- 3. ⭐ Promover Personagem para GOD (Administrador)
-    -> Dá poderes de administrador a um personagem para usar comandos no jogo
-
- 4. 💰 Adicionar Tibia Coins na Conta
-    -> Adiciona moedas na Store do jogo para comprar cosméticos e itens
-
- 5. 📋 Listar Jogadores & Contas
-    -> Exibe a lista com todas as contas, personagens criados e cargos
-
- 6. 🗑️ Deletar Personagem ou Conta
-
- 7. ❮ Voltar ao Menu Principal
-```
+![customizing](docs/image4.png)
 
 ---
 
