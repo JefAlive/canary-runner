@@ -58,6 +58,16 @@ func getMySQLStatusOutput() string {
 	return string(out)
 }
 
+// Detecta o IP do WSL dinamicamente
+func getWSLIP() string {
+	cmd := exec.Command("bash", "-c", "hostname -I | awk '{print $1}'")
+	out, err := cmd.Output()
+	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
+		return "127.0.0.1"
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func readLastLogs(logFilePath string, linesCount int) string {
 	expanded := expandHome(logFilePath)
 	if !fileExists(logFilePath) {
@@ -161,10 +171,39 @@ func manageMySQLNative(action string) tea.Cmd {
 	}
 }
 
+// Dispara o client.exe diretamente no Windows através do WSL
+func launchTibiaClientWindows() tea.Cmd {
+	return func() tea.Msg {
+		exePath := expandHome(appConfig.TibiaClientExe)
+		if !fileExists(appConfig.TibiaClientExe) {
+			return actionDoneMsg{
+				target: targetLaunchClient,
+				notice: "⚠️ Executável do client não encontrado no caminho configurado!",
+			}
+		}
+
+		// Se estiver no WSL, converte o caminho para formato Windows e dispara via cmd.exe
+		if strings.HasPrefix(exePath, "/mnt/") {
+			driveLetter := strings.ToUpper(string(exePath[5]))
+			windowsPath := driveLetter + ":" + strings.ReplaceAll(exePath[6:], "/", "\\")
+			_ = exec.Command("cmd.exe", "/c", "start", "", windowsPath).Start()
+		} else {
+			_ = exec.Command("nohup", exePath).Start()
+		}
+
+		return actionDoneMsg{
+			target: targetLaunchClient,
+			notice: "🚀 Tibia Client disparado na tela do Windows!",
+		}
+	}
+}
+
+// Roda o patcher do client com o local.toml
 func runClientPatchNative() tea.Cmd {
 	return func() tea.Msg {
-		expandedWorkDir := expandHome(PathClientDir)
-		script := fmt.Sprintf("export CLICOLOR_FORCE=1 FORCE_COLOR=1; cd '%s' && ./client-editor-linux-x64 %s", expandedWorkDir, ClientEditorArgs)
+		expandedWorkDir := expandHome(appConfig.ClientEditorDir)
+		expandedExe := expandHome(appConfig.TibiaClientExe)
+		script := fmt.Sprintf("export CLICOLOR_FORCE=1 FORCE_COLOR=1; cd '%s' && ./client-editor-linux-x64 edit -t '%s' -c local.toml", expandedWorkDir, expandedExe)
 		out, err := exec.Command("bash", "-c", script).CombinedOutput()
 		outputStr := strings.ReplaceAll(string(out), "\r", "")
 		if err != nil && len(strings.TrimSpace(outputStr)) == 0 {
@@ -172,9 +211,187 @@ func runClientPatchNative() tea.Cmd {
 		}
 		time.Sleep(400 * time.Millisecond)
 		return actionDoneMsg{
-			target: targetClient,
+			target: targetClientPatch,
 			output: outputStr,
 			notice: "✔ Patch do client aplicado com sucesso!",
+		}
+	}
+}
+
+// Sincroniza IPs no local.toml do client-editor e no login-server
+func runSyncConnectionsNative() tea.Cmd {
+	return func() tea.Msg {
+		var logs strings.Builder
+		targetHost := "127.0.0.1"
+
+		if appConfig.Mode == ModeWSL {
+			targetHost = getWSLIP()
+		} else if appConfig.Mode == ModeVPS && appConfig.PublicHost != "" {
+			targetHost = appConfig.PublicHost
+		}
+
+		logs.WriteString(fmt.Sprintf("\033[1;36m=== SINCRONIZANDO CONEXÕES DE REDE ===\033[0m\n\n"))
+		logs.WriteString(fmt.Sprintf("🌐 Endereço Alvo: \033[1;32m%s\033[0m (Modo: %s)\n\n", targetHost, appConfig.Mode))
+
+		// 1. Atualiza local.toml no client-editor se existir
+		localTomlPath := filepath.Join(expandHome(appConfig.ClientEditorDir), "local.toml")
+		if fileExists(localTomlPath) {
+			content, err := os.ReadFile(localTomlPath)
+			if err == nil {
+				lines := strings.Split(string(content), "\n")
+				for i, line := range lines {
+					if strings.HasPrefix(strings.TrimSpace(line), "ip =") || strings.HasPrefix(strings.TrimSpace(line), "host =") {
+						lines[i] = fmt.Sprintf("ip = \"%s\"", targetHost)
+					}
+				}
+				_ = os.WriteFile(localTomlPath, []byte(strings.Join(lines, "\n")), 0644)
+				logs.WriteString(fmt.Sprintf("✔ local.toml atualizado com o endereço %s\n", targetHost))
+			}
+		} else {
+			logs.WriteString("ℹ️ Arquivo local.toml ainda não existe (será criado no primeiro patch).\n")
+		}
+
+		// 2. Atualiza config.toml no login-server se existir
+		loginTomlPath := filepath.Join(expandHome(appConfig.LoginDir), "config.toml")
+		if fileExists(loginTomlPath) {
+			content, err := os.ReadFile(loginTomlPath)
+			if err == nil {
+				lines := strings.Split(string(content), "\n")
+				for i, line := range lines {
+					if strings.HasPrefix(strings.TrimSpace(line), "ip =") {
+						lines[i] = fmt.Sprintf("ip = \"%s\"", targetHost)
+					}
+				}
+				_ = os.WriteFile(loginTomlPath, []byte(strings.Join(lines, "\n")), 0644)
+				logs.WriteString(fmt.Sprintf("✔ login-server config.toml atualizado com o endereço %s\n", targetHost))
+			}
+		} else {
+			logs.WriteString("ℹ️ config.toml do login-server não encontrado.\n")
+		}
+
+		logs.WriteString("\n\033[1;32m✔ Sincronização concluída com sucesso!\033[0m\n")
+
+		return actionDoneMsg{
+			target: targetSyncConnections,
+			output: logs.String(),
+			notice: "✔ Conexões de rede sincronizadas!",
+		}
+	}
+}
+
+// Executa a Instalação 1-Click
+func runFullSetup1ClickNative() tea.Cmd {
+	return func() tea.Msg {
+		var logs strings.Builder
+		logs.WriteString("\033[1;36m=== INICIANDO INSTALAÇÃO AUTOMÁTICA COMPLETA ===\033[0m\n\n")
+
+		canaryDir := expandHome(appConfig.CanaryDir)
+		loginDir := expandHome(appConfig.LoginDir)
+		editorDir := expandHome(appConfig.ClientEditorDir)
+		clientDir := expandHome(appConfig.TibiaClientDir)
+
+		// 1. Canary
+		if !fileExists(appConfig.CanaryDir) {
+			logs.WriteString(fmt.Sprintf("📥 Clonando Canary em %s...\n", canaryDir))
+			out, err := exec.Command("git", "clone", RepoCanaryURL, canaryDir).CombinedOutput()
+			if err != nil {
+				logs.WriteString(fmt.Sprintf("❌ Erro no Canary: %s\n", string(out)))
+			} else {
+				logs.WriteString("✔ Canary clonado com sucesso!\n")
+			}
+		} else {
+			logs.WriteString("✔ Pasta do Canary já existe.\n")
+		}
+
+		// 2. Login Server
+		if !fileExists(appConfig.LoginDir) {
+			logs.WriteString(fmt.Sprintf("\n📥 Clonando Login Server em %s...\n", loginDir))
+			out, err := exec.Command("git", "clone", RepoLoginURL, loginDir).CombinedOutput()
+			if err != nil {
+				logs.WriteString(fmt.Sprintf("❌ Erro no Login Server: %s\n", string(out)))
+			} else {
+				logs.WriteString("✔ Login Server clonado com sucesso!\n")
+			}
+		} else {
+			logs.WriteString("✔ Pasta do Login Server já existe.\n")
+		}
+
+		// 3. Client Editor
+		if !fileExists(appConfig.ClientEditorDir) {
+			logs.WriteString(fmt.Sprintf("\n📥 Clonando Client Editor em %s...\n", editorDir))
+			out, err := exec.Command("git", "clone", RepoClientEditURL, editorDir).CombinedOutput()
+			if err != nil {
+				logs.WriteString(fmt.Sprintf("❌ Erro no Client Editor: %s\n", string(out)))
+			} else {
+				logs.WriteString("✔ Client Editor clonado com sucesso!\n")
+			}
+		} else {
+			logs.WriteString("✔ Pasta do Client Editor já existe.\n")
+		}
+
+		// 4. Download do Client 15.25
+		logs.WriteString(fmt.Sprintf("\n📥 Baixando Tibia Client 15.25 em %s...\n", clientDir))
+		_ = os.MkdirAll(clientDir, 0755)
+		zipPath := filepath.Join(clientDir, "tibia-client-15.25.zip")
+
+		dlCmd := exec.Command("curl", "-L", "-o", zipPath, ClientZipURL)
+		out, err := dlCmd.CombinedOutput()
+		if err != nil {
+			logs.WriteString(fmt.Sprintf("❌ Erro ao baixar client: %s\n", string(out)))
+		} else {
+			logs.WriteString("📦 Extraindo client...\n")
+			unzipCmd := exec.Command("unzip", "-o", zipPath, "-d", clientDir)
+			unzipOut, unzipErr := unzipCmd.CombinedOutput()
+			if unzipErr != nil {
+				logs.WriteString(fmt.Sprintf("❌ Erro ao extrair: %s\n", string(unzipOut)))
+			} else {
+				_ = os.Remove(zipPath)
+				logs.WriteString("✔ Tibia Client 15.25 extraído e pronto para uso!\n")
+			}
+		}
+
+		logs.WriteString("\n\033[1;32m=== SETUP CONCLUÍDO COM SUCESSO! ===\033[0m\n")
+
+		return actionDoneMsg{
+			target: targetFullSetup,
+			output: logs.String(),
+			notice: "✔ Instalação completa finalizada!",
+		}
+	}
+}
+
+// Download e extração do client isolado
+func runDownloadClientNative() tea.Cmd {
+	return func() tea.Msg {
+		var logs strings.Builder
+		clientDir := expandHome(appConfig.TibiaClientDir)
+		_ = os.MkdirAll(clientDir, 0755)
+		zipPath := filepath.Join(clientDir, "tibia-client-15.25.zip")
+
+		logs.WriteString(fmt.Sprintf("📥 Baixando Tibia Client 15.25 em: %s\nURL: %s\n\n", clientDir, ClientZipURL))
+
+		dlCmd := exec.Command("curl", "-L", "-o", zipPath, ClientZipURL)
+		out, err := dlCmd.CombinedOutput()
+		if err != nil {
+			logs.WriteString(fmt.Sprintf("❌ Falha no download: %s\n", string(out)))
+			return actionDoneMsg{target: targetDownloadClient, output: logs.String(), notice: "❌ Erro no download do client!"}
+		}
+
+		logs.WriteString("📦 Extraindo arquivos do client...\n")
+		unzipCmd := exec.Command("unzip", "-o", zipPath, "-d", clientDir)
+		unzipOut, unzipErr := unzipCmd.CombinedOutput()
+		if unzipErr != nil {
+			logs.WriteString(fmt.Sprintf("❌ Falha na descompactação: %s\n", string(unzipOut)))
+			return actionDoneMsg{target: targetDownloadClient, output: logs.String(), notice: "❌ Erro ao descompactar o client!"}
+		}
+
+		_ = os.Remove(zipPath)
+		logs.WriteString("\n\033[1;32m✔ Tibia Client 15.25 pronto em: " + clientDir + "\033[0m\n")
+
+		return actionDoneMsg{
+			target: targetDownloadClient,
+			output: logs.String(),
+			notice: "✔ Download e extração do client finalizados!",
 		}
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -20,6 +21,66 @@ func (m model) View() string {
 			m.winHeight,
 			lipgloss.Left,
 			lipgloss.Top,
+			renderedContent,
+			lipgloss.WithWhitespaceBackground(t.Bg),
+			lipgloss.WithWhitespaceChars(" "),
+		)
+
+	case viewSetupMenu:
+		renderedContent = m.renderSetupMenuView()
+		return lipgloss.Place(
+			m.winWidth,
+			m.winHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			renderedContent,
+			lipgloss.WithWhitespaceBackground(t.Bg),
+			lipgloss.WithWhitespaceChars(" "),
+		)
+
+	case viewPlayersMenu:
+		renderedContent = m.renderPlayersMenuView()
+		return lipgloss.Place(
+			m.winWidth,
+			m.winHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			renderedContent,
+			lipgloss.WithWhitespaceBackground(t.Bg),
+			lipgloss.WithWhitespaceChars(" "),
+		)
+
+	case viewToolsMenu:
+		renderedContent = m.renderToolsMenuView()
+		return lipgloss.Place(
+			m.winWidth,
+			m.winHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			renderedContent,
+			lipgloss.WithWhitespaceBackground(t.Bg),
+			lipgloss.WithWhitespaceChars(" "),
+		)
+
+	case viewModeSelector:
+		modal := m.renderModeSelectorView()
+		return lipgloss.Place(
+			m.winWidth,
+			m.winHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			modal,
+			lipgloss.WithWhitespaceBackground(t.Bg),
+			lipgloss.WithWhitespaceChars(" "),
+		)
+
+	case viewEditPaths:
+		renderedContent = m.renderEditPathsView()
+		return lipgloss.Place(
+			m.winWidth,
+			m.winHeight,
+			lipgloss.Center,
+			lipgloss.Center,
 			renderedContent,
 			lipgloss.WithWhitespaceBackground(t.Bg),
 			lipgloss.WithWhitespaceChars(" "),
@@ -121,12 +182,15 @@ func (m model) renderMenuView() string {
 		}
 		rowSt := lipgloss.NewStyle().Background(rowBg)
 
-		badgeMissing := lipgloss.NewStyle().Bold(true).Foreground(t.Bg).Background(t.Warning).Padding(0, 1).SetString("⚠ NÃO COMPILADO").Render()
+		badgeMissing := lipgloss.NewStyle().Bold(true).Foreground(t.Bg).Background(t.Warning).Padding(0, 1).SetString("⚠ NÃO INSTALADO").Render()
+		badgeSubmenu := lipgloss.NewStyle().Bold(true).Foreground(t.Bg).Background(t.Secondary).Padding(0, 1).SetString("⚡ SUBMENU").Render()
 		badgeAction := lipgloss.NewStyle().Bold(true).Foreground(t.Bg).Background(t.Secondary).Padding(0, 1).SetString("⚡ EXECUTAR").Render()
 		badgeTheme := lipgloss.NewStyle().Bold(true).Foreground(t.Bg).Background(t.Primary).Padding(0, 1).SetString(t.ID).Render()
 
 		var badge string
-		if item.checkBin != "" && !fileExists(item.checkBin) {
+		if item.id == "canary" && !fileExists(filepath.Join(expandHome(appConfig.CanaryDir), "canary")) {
+			badge = badgeMissing
+		} else if item.id == "login" && !fileExists(filepath.Join(expandHome(appConfig.LoginDir), "login_server")) {
 			badge = badgeMissing
 		} else if item.isMySQL {
 			if isMySQLRunning() {
@@ -134,12 +198,8 @@ func (m model) renderMenuView() string {
 			} else {
 				badge = badgeOff
 			}
-		} else if item.procName != "" {
-			if running, _ := isProcessRunning(item.procName); running {
-				badge = badgeOn
-			} else {
-				badge = badgeOff
-			}
+		} else if item.isPlayers || item.isTools || item.isSetup {
+			badge = badgeSubmenu
 		} else if item.isTheme {
 			badge = badgeTheme
 		} else if item.isExit {
@@ -203,6 +263,349 @@ func (m model) renderMenuView() string {
 	return lipgloss.JoinVertical(lipgloss.Left, allElements...)
 }
 
+func (m model) renderSetupMenuView() string {
+	t := currentTheme
+	menuWidth := m.winWidth - 6
+	if menuWidth > maxMenuWidth {
+		menuWidth = maxMenuWidth
+	}
+
+	modeStr := "🖥️ Jogando pelo Windows (WSL)"
+	if appConfig.Mode == ModeVPS {
+		modeStr = "🌐 Servidor na Nuvem (VPS)"
+	} else if appConfig.Mode == ModeLinuxLocal {
+		modeStr = "💻 Linux Local"
+	}
+
+	titleText := lipgloss.NewStyle().Bold(true).Foreground(t.Primary).Background(t.Bg).Render(fmt.Sprintf("⚙️  SETUP & CONEXÕES   [ Modo: %s ]", modeStr))
+	innerBannerW := menuWidth - 4
+	titlePadded := padLine(titleText, innerBannerW, t.Bg)
+
+	topBanner := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Border).
+		BorderBackground(t.Bg).
+		Background(t.Bg).
+		Padding(0, 1).
+		Render(titlePadded)
+
+	var menuRows []string
+
+	for i, item := range m.setupItems {
+		isSelected := (i == m.setupIndex)
+		rowBg := t.Bg
+		if isSelected {
+			rowBg = t.KeyBg
+		}
+		rowSt := lipgloss.NewStyle().Background(rowBg)
+
+		cursor := "  "
+		titleSt := lipgloss.NewStyle().Bold(true).Foreground(t.Text).Background(rowBg)
+		descSt := lipgloss.NewStyle().Foreground(t.Muted).Background(rowBg)
+
+		if isSelected {
+			cursor = lipgloss.NewStyle().Foreground(t.Primary).Background(rowBg).Bold(true).Render("▶ ")
+			titleSt = titleSt.Foreground(t.Primary)
+			descSt = descSt.Foreground(t.Text)
+		} else {
+			cursor = rowSt.Render("  ")
+		}
+
+		leftTitle := cursor + titleSt.Render(item.title)
+		line1 := padLine(leftTitle, menuWidth, rowBg)
+		line2 := padLine(rowSt.Render("   ")+descSt.Render(item.desc), menuWidth, rowBg)
+
+		menuRows = append(menuRows, line1, line2)
+
+		if i < len(m.setupItems)-1 {
+			menuRows = append(menuRows, padLine("", menuWidth, t.Bg))
+		}
+	}
+
+	footerText := formatFooterBar("⚡ ATALHOS:", []string{
+		formatAction("↑/↓", "Navegar", t),
+		formatAction("ENTER", "Executar", t),
+		formatAction("Esc", "❮ Voltar", t),
+	}, t)
+
+	footerPadded := padLine(footerText, menuWidth, t.Bg)
+	spacer := padLine("", menuWidth, t.Bg)
+
+	allElements := []string{
+		topBanner,
+		spacer,
+	}
+	allElements = append(allElements, menuRows...)
+	allElements = append(allElements, spacer, footerPadded)
+
+	return lipgloss.JoinVertical(lipgloss.Left, allElements...)
+}
+
+func (m model) renderPlayersMenuView() string {
+	t := currentTheme
+	menuWidth := m.winWidth - 6
+	if menuWidth > maxMenuWidth {
+		menuWidth = maxMenuWidth
+	}
+
+	titleText := lipgloss.NewStyle().Bold(true).Foreground(t.Primary).Background(t.Bg).Render("👥  GERENCIAR JOGADORES & CONTAS")
+	innerBannerW := menuWidth - 4
+	titlePadded := padLine(titleText, innerBannerW, t.Bg)
+
+	topBanner := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Border).
+		BorderBackground(t.Bg).
+		Background(t.Bg).
+		Padding(0, 1).
+		Render(titlePadded)
+
+	var menuRows []string
+
+	for i, item := range m.playersItems {
+		isSelected := (i == m.playersIndex)
+		rowBg := t.Bg
+		if isSelected {
+			rowBg = t.KeyBg
+		}
+		rowSt := lipgloss.NewStyle().Background(rowBg)
+
+		cursor := "  "
+		titleSt := lipgloss.NewStyle().Bold(true).Foreground(t.Text).Background(rowBg)
+		descSt := lipgloss.NewStyle().Foreground(t.Muted).Background(rowBg)
+
+		if isSelected {
+			cursor = lipgloss.NewStyle().Foreground(t.Primary).Background(rowBg).Bold(true).Render("▶ ")
+			titleSt = titleSt.Foreground(t.Primary)
+			descSt = descSt.Foreground(t.Text)
+		} else {
+			cursor = rowSt.Render("  ")
+		}
+
+		leftTitle := cursor + titleSt.Render(item.title)
+		line1 := padLine(leftTitle, menuWidth, rowBg)
+		line2 := padLine(rowSt.Render("   ")+descSt.Render(item.desc), menuWidth, rowBg)
+
+		menuRows = append(menuRows, line1, line2)
+
+		if i < len(m.playersItems)-1 {
+			menuRows = append(menuRows, padLine("", menuWidth, t.Bg))
+		}
+	}
+
+	footerText := formatFooterBar("⚡ ATALHOS:", []string{
+		formatAction("↑/↓", "Navegar", t),
+		formatAction("ENTER", "Selecionar", t),
+		formatAction("Esc", "❮ Voltar", t),
+	}, t)
+
+	footerPadded := padLine(footerText, menuWidth, t.Bg)
+	spacer := padLine("", menuWidth, t.Bg)
+
+	allElements := []string{
+		topBanner,
+		spacer,
+	}
+	allElements = append(allElements, menuRows...)
+	allElements = append(allElements, spacer, footerPadded)
+
+	return lipgloss.JoinVertical(lipgloss.Left, allElements...)
+}
+
+func (m model) renderToolsMenuView() string {
+	t := currentTheme
+	menuWidth := m.winWidth - 6
+	if menuWidth > maxMenuWidth {
+		menuWidth = maxMenuWidth
+	}
+
+	titleText := lipgloss.NewStyle().Bold(true).Foreground(t.Primary).Background(t.Bg).Render("🛠️  FERRAMENTAS & CALIBRAÇÃO GLOBAL")
+	innerBannerW := menuWidth - 4
+	titlePadded := padLine(titleText, innerBannerW, t.Bg)
+
+	topBanner := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Border).
+		BorderBackground(t.Bg).
+		Background(t.Bg).
+		Padding(0, 1).
+		Render(titlePadded)
+
+	var menuRows []string
+
+	for i, item := range m.toolsItems {
+		isSelected := (i == m.toolsIndex)
+		rowBg := t.Bg
+		if isSelected {
+			rowBg = t.KeyBg
+		}
+		rowSt := lipgloss.NewStyle().Background(rowBg)
+
+		cursor := "  "
+		titleSt := lipgloss.NewStyle().Bold(true).Foreground(t.Text).Background(rowBg)
+		descSt := lipgloss.NewStyle().Foreground(t.Muted).Background(rowBg)
+
+		if isSelected {
+			cursor = lipgloss.NewStyle().Foreground(t.Primary).Background(rowBg).Bold(true).Render("▶ ")
+			titleSt = titleSt.Foreground(t.Primary)
+			descSt = descSt.Foreground(t.Text)
+		} else {
+			cursor = rowSt.Render("  ")
+		}
+
+		leftTitle := cursor + titleSt.Render(item.title)
+		line1 := padLine(leftTitle, menuWidth, rowBg)
+		line2 := padLine(rowSt.Render("   ")+descSt.Render(item.desc), menuWidth, rowBg)
+
+		menuRows = append(menuRows, line1, line2)
+
+		if i < len(m.toolsItems)-1 {
+			menuRows = append(menuRows, padLine("", menuWidth, t.Bg))
+		}
+	}
+
+	footerText := formatFooterBar("⚡ ATALHOS:", []string{
+		formatAction("↑/↓", "Navegar", t),
+		formatAction("ENTER", "Selecionar", t),
+		formatAction("Esc", "❮ Voltar", t),
+	}, t)
+
+	footerPadded := padLine(footerText, menuWidth, t.Bg)
+	spacer := padLine("", menuWidth, t.Bg)
+
+	allElements := []string{
+		topBanner,
+		spacer,
+	}
+	allElements = append(allElements, menuRows...)
+	allElements = append(allElements, spacer, footerPadded)
+
+	return lipgloss.JoinVertical(lipgloss.Left, allElements...)
+}
+
+func (m model) renderModeSelectorView() string {
+	t := currentTheme
+	const modalWidth = 74
+	const innerWidth = modalWidth - 6
+
+	title := padLine(lipgloss.NewStyle().Bold(true).Foreground(t.Primary).Background(t.Bg).Render("🌐 ESCOLHA COMO VOCÊ ESTÁ USANDO ESTE SERVIDOR"), innerWidth, t.Bg)
+	spacer := padLine("", innerWidth, t.Bg)
+
+	options := []struct {
+		title string
+		desc  string
+	}{
+		{
+			title: "🖥️  Jogando pelo Windows (WSL)",
+			desc:  "Você joga pelo Windows e o servidor roda no WSL. O endereço é atualizado sozinho.",
+		},
+		{
+			title: "🌐  Servidor na Nuvem / Para Amigos (VPS)",
+			desc:  "O servidor fica em uma máquina na internet para outras pessoas jogarem.",
+		},
+		{
+			title: "💻  Linux Completo (Tudo no mesmo PC)",
+			desc:  "Você usa apenas Linux para tudo (o servidor e o jogo rodam no mesmo sistema).",
+		},
+	}
+
+	var lines []string
+	lines = append(lines, title, spacer)
+
+	for i, opt := range options {
+		isSelected := (i == m.modeIndex)
+		rowBg := t.Bg
+		if isSelected {
+			rowBg = t.KeyBg
+		}
+		rowSt := lipgloss.NewStyle().Background(rowBg)
+
+		cursor := "  "
+		titleSt := lipgloss.NewStyle().Bold(true).Foreground(t.Text).Background(rowBg)
+		descSt := lipgloss.NewStyle().Foreground(t.Muted).Background(rowBg)
+
+		if isSelected {
+			cursor = lipgloss.NewStyle().Foreground(t.Primary).Background(rowBg).Bold(true).Render("▶ ")
+			titleSt = titleSt.Foreground(t.Primary)
+			descSt = descSt.Foreground(t.Text)
+		} else {
+			cursor = rowSt.Render("  ")
+		}
+
+		line1 := padLine(cursor+titleSt.Render(opt.title), innerWidth, rowBg)
+		line2 := padLine(rowSt.Render("   ")+descSt.Render(opt.desc), innerWidth, rowBg)
+
+		lines = append(lines, line1, line2)
+		if i < len(options)-1 {
+			lines = append(lines, padLine("", innerWidth, t.Bg))
+		}
+	}
+
+	footer := formatFooterBar("⚡ ATALHOS:", []string{
+		formatAction("↑/↓", "Navegar", t),
+		formatAction("ENTER", "Confirmar Modo", t),
+		formatAction("Esc", "Cancelar", t),
+	}, t)
+
+	lines = append(lines, spacer, padLine(footer, innerWidth, t.Bg))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Primary).
+		BorderBackground(t.Bg).
+		Background(t.Bg).
+		Padding(1, 2).
+		Width(modalWidth).
+		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
+func (m model) renderEditPathsView() string {
+	t := currentTheme
+	const modalWidth = 76
+	const innerWidth = modalWidth - 6
+
+	labels := []string{
+		"1. Pasta do Canary Server:",
+		"2. Pasta do Login Server:",
+		"3. Pasta do Client Editor:",
+		"4. Pasta de Download do Client:",
+		"5. Caminho do Executável (client.exe):",
+	}
+
+	lines := []string{
+		padLine(lipgloss.NewStyle().Bold(true).Foreground(t.Primary).Background(t.Bg).Render("📁 CONFIGURAR CAMINHOS DAS PASTAS"), innerWidth, t.Bg),
+		padLine(lipgloss.NewStyle().Foreground(t.Muted).Background(t.Bg).Render("Altere apenas se você já baixou os projetos em pastas manuais:"), innerWidth, t.Bg),
+		padLine("", innerWidth, t.Bg),
+	}
+
+	for i := range m.pathInputs {
+		lblSt := lipgloss.NewStyle().Foreground(t.Text).Background(t.Bg)
+		if i == m.pathInputIndex {
+			lblSt = lblSt.Bold(true).Foreground(t.Primary)
+		}
+		lines = append(lines, padLine(lblSt.Render(labels[i]), innerWidth, t.Bg))
+		lines = append(lines, padLine(m.pathInputs[i].View(), innerWidth, t.Bg))
+		lines = append(lines, padLine("", innerWidth, t.Bg))
+	}
+
+	footer := formatFooterBar("⚡ ATALHOS:", []string{
+		formatAction("TAB / ↑↓", "Alternar Campo", t),
+		formatAction("ENTER", "Salvar Configurações", t),
+		formatAction("Esc", "Cancelar", t),
+	}, t)
+
+	lines = append(lines, padLine(footer, innerWidth, t.Bg))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Primary).
+		BorderBackground(t.Bg).
+		Background(t.Bg).
+		Padding(1, 2).
+		Width(modalWidth).
+		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+}
+
 func (m model) renderServiceView() string {
 	t := currentTheme
 	fullWidth := m.winWidth - 4
@@ -255,10 +658,34 @@ func (m model) renderServiceView() string {
 			pidStr = lipgloss.NewStyle().Foreground(t.Muted).Background(t.Bg).Render("Inativo")
 		}
 
-	case targetClient:
-		name = "CLIENT PATCHER 15.25"
+	case targetClientPatch:
+		name = "CONFIGURAR TIBIA CLIENT 15.25"
 		statusStr = badgeAction
 		pidStr = lipgloss.NewStyle().Foreground(t.Secondary).Background(t.Bg).Render("Target: client.exe")
+		isRunning = false
+
+	case targetFullSetup:
+		name = "INSTALAÇÃO AUTOMÁTICA COMPLETA"
+		statusStr = badgeAction
+		pidStr = lipgloss.NewStyle().Foreground(t.Secondary).Background(t.Bg).Render("Status: Setup")
+		isRunning = false
+
+	case targetDownloadClient:
+		name = "DOWNLOAD TIBIA CLIENT 15.25"
+		statusStr = badgeAction
+		pidStr = lipgloss.NewStyle().Foreground(t.Secondary).Background(t.Bg).Render("Status: Download")
+		isRunning = false
+
+	case targetSyncConnections:
+		name = "SINCRONIZAR CONEXÕES DE REDE"
+		statusStr = badgeAction
+		pidStr = lipgloss.NewStyle().Foreground(t.Secondary).Background(t.Bg).Render("Status: Sync")
+		isRunning = false
+
+	default:
+		name = "PAINEL DE FERRAMENTA"
+		statusStr = badgeAction
+		pidStr = lipgloss.NewStyle().Foreground(t.Secondary).Background(t.Bg).Render("Status: Preview")
 		isRunning = false
 	}
 
@@ -266,7 +693,7 @@ func (m model) renderServiceView() string {
 	txtSt := lipgloss.NewStyle().Foreground(t.Text).Background(t.Bg)
 	spSt := lipgloss.NewStyle().Background(t.Bg)
 
-	h1 := lblSt.Render("🖥️  PAINEL DO SERVIÇO: ") + txtSt.Render(name)
+	h1 := lblSt.Render("🖥️  PAINEL: ") + txtSt.Render(name)
 	h2 := spSt.Render("   ") + lblSt.Render("Status: ") + statusStr
 	h3 := spSt.Render("   (") + pidStr + txtSt.Render(")")
 	headerText := h1 + h2 + h3
@@ -286,10 +713,10 @@ func (m model) renderServiceView() string {
 	}
 
 	var actionsBar string
-	if m.activeTarget == targetClient {
+	if m.activeTarget == targetClientPatch || m.activeTarget == targetFullSetup || m.activeTarget == targetDownloadClient || m.activeTarget == targetSyncConnections || m.activeTarget == targetPlaceholder {
 		actionsBar = formatFooterBar("⚡ AÇÕES:", []string{
-			formatAction("ENTER", "Aplicar Novamente", t),
-			formatAction("Esc", "❮ Voltar ao Menu", t),
+			formatAction("ENTER", "Executar Novamente", t),
+			formatAction("Esc", "❮ Voltar", t),
 		}, t)
 	} else if isRunning {
 		actionsBar = formatFooterBar("⚡ AÇÕES:", []string{

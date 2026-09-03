@@ -10,8 +10,7 @@ import (
 )
 
 func main() {
-	// Força o Lipgloss a usar TrueColor (24-bit RGB real - 16.7 milhões de cores)
-	// evitando a quantização para 256 cores
+	// Força o perfil 24-bit TrueColor RGB
 	lipgloss.SetColorProfile(termenv.TrueColor)
 
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen(), tea.WithMouseCellMotion())
