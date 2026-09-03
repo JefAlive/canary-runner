@@ -43,6 +43,12 @@ Se você é dev e quer contribuir com a comunidade de Open Tibia, por que isso d
 
 ---
 
+## ⚠️ Work In Progress
+
+Sim, a ferramenta ainda está sendo desenvolvida, algumas funcionalidades estão no menu **apenas como exemplo** de onde queremos chegar com essa ferramenta. Se você é dev, você pode contribuir desenvolvendo alguma dessas ferramentas.
+
+---
+
 ## 🖥️ Espie como é por dentro
 
 ### 1. Menu Principal (Dia a dia descomplicado)
